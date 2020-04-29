@@ -1,9 +1,12 @@
-import sys
 import os
-import tempfile
 import pathlib
+import shutil
+import sys
+import tempfile
+from distutils.dir_util import copy_tree
 from urllib import request
 from zipfile import ZipFile
+
 
 def download(url):
     tmp_folder = pathlib.Path(tempfile.mkdtemp())
@@ -33,15 +36,25 @@ def main():
         print("python winnolo.py python_script.py")
         return
 
+    python_version = sys.version.split()[0]
+
     script_filename = pathlib.Path(sys.argv[1])
     project_folder = script_filename.parent
-    dist_folder = project_folder.joinpath("dist")
+    dist_folder = project_folder.parent.joinpath("{}.dist".format(project_folder.name))
+    app_folder = dist_folder.joinpath("app")
+
+    print("Generating executable inside {}".format(dist_folder))
+
     python_folder = dist_folder.joinpath("python")
 
     dist_folder.mkdir(parents=True, exist_ok=True)
     python_folder.mkdir(parents=True, exist_ok=True)
 
-    get_python(version="3.7.7", dest=python_folder)
+    # Downloading and extracting python into python_folder
+    get_python(version=python_version, dest=python_folder)
+
+    # Copying the project inside dist_folder
+    copy_tree(str(project_folder), str(app_folder))
 
 
 if __name__ == "__main__":
