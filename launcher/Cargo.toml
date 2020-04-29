@@ -1,0 +1,11 @@
+[package]
+name = "Launcher"
+version = "1.0.0"
+authors = ["Thiago Franco de Moraes <tfmoraes@cti.gov.br>"]
+
+[[bin]]
+name = "launcher"
+path = "src/main.rs"
+
+[dependencies]
+subprocess = "0.2.4"
