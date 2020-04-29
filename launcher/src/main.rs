@@ -3,13 +3,21 @@ extern crate subprocess;
 use std::io::{Read};
 use std::str;
 use subprocess::{Popen, PopenConfig, Redirection, PopenError};
+use std::vec::Vec;
 
 
 fn main() -> Result<(), PopenError>{
-    let mut p = Popen::create(&["dmesg"], PopenConfig{
+    let mut cmd : Vec<String> = Vec::new();
+    cmd.push("echo".to_string());
+    for arg in std::env::args().skip(1) {
+        cmd.push(arg);
+    }
+    let mut p = Popen::create(&cmd, PopenConfig{
     stdout: Redirection::Pipe, ..Default::default()
     })?;
     let mut buffer = [0; 1024];
+
+    println!("{:?}", std::env::args().skip(1));
 
 
     while p.poll() == None {
