@@ -6,9 +6,23 @@ import tempfile
 from distutils.dir_util import copy_tree
 from urllib import request
 from zipfile import ZipFile
+import subprocess
+
+IGNORE_PATTERNS = ('.pyc','CVS','.git','tmp','.svn')
+
+
+def download_and_install_pip(python_exec):
+    pip_path = download("https://bootstrap.pypa.io/get-pip.py")
+    run_cmd([str(python_exec), str(pip_path)])
+
+
+def pip_install(python_exec, pip_package):
+    print("Installing packages using pip")
+    run_cmd([str(python_exec), "-m", "pip", "install", pip_package])
 
 
 def run_cmd(cmd, env=None, cwd=None):
+    print("Running command", " ".join(cmd))
     with subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE,
@@ -24,10 +38,12 @@ def run_cmd(cmd, env=None, cwd=None):
         raise subprocess.CalledProcessError(p.returncode, p.args)
 
 
-def download(url):
-    tmp_folder = pathlib.Path(tempfile.mkdtemp())
-    filename = url.split("/")[-1]
-    filepath = tmp_folder.joinpath(filename)
+def download(url, filepath=None):
+    print(f"Downloading {url}")
+    if filepath is None:
+        tmp_folder = pathlib.Path(tempfile.mkdtemp())
+        filename = url.split("/")[-1]
+        filepath = tmp_folder.joinpath(filename)
     with open(filepath, "w+b") as f:
         r = request.urlopen(url)
         for bits in r:
@@ -36,16 +52,47 @@ def download(url):
 
 
 def extract_zip(filepath, dest):
+    print(f"Extracting {filepath} to {dest}")
     with ZipFile(filepath, "r") as zip_obj:
         zip_obj.extractall(dest)
 
 
 def get_python(version, dest, arch="amd64"):
+    print(f"Getting Python-{version}")
+    version_2dig = ".".join(version.split('.')[:2])
     url = (
-        f"https://www.python.org/ftp/python/{version}/python-{version}-embed-{arch}.zip"
+        f"https://sourceforge.net/projects/portable-python/files/Portable%20Python%20{version_2dig}/Portable%20Python-{version}%20x64.exe/download"
     )
-    filepath = download(url)
-    extract_zip(filepath, dest)
+    filepath = download(url, dest.joinpath("ppython.exe"))
+    # Extracting python
+    run_cmd([str(filepath.resolve()), "-y"], cwd=str(dest))
+    # Removing zip python
+    filepath.unlink()
+    # Removing unneeded files and folder
+    ppython_folder = dest.joinpath(f"Portable Python-{version} x64")
+    shutil.copytree(str(ppython_folder.joinpath("App/Python")), str(dest), ignore=shutil.ignore_patterns(*IGNORE_PATTERNS), dirs_exist_ok=True)
+    shutil.rmtree(ppython_folder, ignore_errors=True)
+    shutil.rmtree(dest.joinpath("tcl"), ignore_errors=True)
+    shutil.rmtree(dest.joinpath("include"), ignore_errors=True)
+    shutil.rmtree(dest.joinpath("Doc"), ignore_errors=True)
+    shutil.rmtree(dest.joinpath("Scripts"), ignore_errors=True)
+    shutil.rmtree(dest.joinpath("Tools"), ignore_errors=True)
+
+
+def compress_upx(folder):
+    patterns = ("pyd", "dll", "exe")
+    for pattern in patterns:
+        for fname in folder.glob(f"**/*.{pattern}"):
+            try:
+                run_cmd(["upx", "-1", str(fname.resolve())])
+            except subprocess.CalledProcessError:
+                pass
+
+
+def compile_pyc(python_exec, folder):
+    run_cmd([python_exec, "-m", "compileall", str(folder)])
+    for fname in folder.glob("**/.py"):
+        fname.unlink()
 
 
 def main():
@@ -64,7 +111,10 @@ def main():
     print("Generating executable inside {}".format(dist_folder))
 
     python_folder = dist_folder.joinpath("python")
+    python_exec = str(python_folder.joinpath("python.exe"))
 
+    if dist_folder.exists():
+        shutil.rmtree(dist_folder, ignore_errors=True)
     dist_folder.mkdir(parents=True, exist_ok=True)
     python_folder.mkdir(parents=True, exist_ok=True)
 
@@ -72,12 +122,17 @@ def main():
     get_python(version=python_version, dest=python_folder)
 
     # Copying the project inside dist_folder
-    copy_tree(str(project_folder), str(app_folder))
+    shutil.copytree(str(project_folder), str(app_folder), ignore=shutil.ignore_patterns(*IGNORE_PATTERNS), dirs_exist_ok=True)
+    
+    #shutil.rmtree(app_folder.joinpath(".git"))
+
+    # Download and install pip
+    # download_and_install_pip(python_exec)
 
     # Installing python libs from requirements
     run_cmd(
         [
-            str(python_folder.joinpath("python.exe")),
+            python_exec,
             "-m",
             "pip",
             "install",
@@ -86,6 +141,12 @@ def main():
         ]
     )
 
+    # Copying launcher
+    shutil.copyfile(pathlib.Path("launcher/launcher.exe"), dist_folder.joinpath("launcher.exe"))
+
+    #compress_upx(dist_folder)
+
+    #compile_pyc(python_exec, dist_folder)
 
 if __name__ == "__main__":
     main()
